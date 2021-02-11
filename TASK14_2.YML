@@ -1,0 +1,75 @@
+  
+- hosts: localhost
+  ignore_errors: no
+  vars_prompt:
+
+  - name: cont_name
+    prompt: " Enter Container name: "
+    private: no
+
+
+  - name: port
+    prompt: "Enter the port number of docker host to attach with port 80 of the container: "
+    private: no
+
+  tasks:
+  - name: Adding Docker yum repository
+    yum_repository:
+          name: "Docker"
+          description: "Docker repository for RHEL8"
+          baseurl: "https://download.docker.com/linux/centos/7/x86_64/stable/"
+          gpgcheck: no
+          enabled: yes
+
+  - name: Installing the docker-ce module
+    command:
+      cmd: "yum install docker-ce --nobest -y"
+      warn: false
+      
+  - name: Starting the Docker services
+    service:
+      name: "docker"
+      state: started
+
+  - name: Installing the required pip modules
+    pip:
+      name: docker-py
+      
+
+  - name: stopping selinux
+    selinux:
+            policy: targeted
+            state: permissive
+
+  - name: Pulling docker image
+    docker_image:
+          name: "sayedimran/centos:v3"
+          source: pull
+
+  - name: Launching a container
+    docker_container:
+            name: "{{ cont_name }}"
+            image: "sayedimran/centos:v3"
+            state: started
+            interactive: yes
+            detach: yes
+            tty: yes
+            ports: 
+                    - "{{ port }}:80"
+
+  - name: "Retrieving IP of {{ cont_name }} container"
+    docker_container_info:
+            name: "{{ cont_name }}"
+    register: cinfo
+
+  - debug:
+            var: cinfo.container.NetworkSettings.IPAddress
+
+
+  - name: Updating ansible inventory file
+    blockinfile:
+            dest: "/root/hosts.txt"
+            block: |
+                    [docker]
+                    {{ cinfo['container']['NetworkSettings']['IPAddress'] }} ansible_user=root ansible_ssh_pass=redhat ansible_connection=ssh
+            marker: ""
